@@ -32,30 +32,63 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# 필요한 도구 확인
-check_requirements() {
-    print_status "필요한 도구들을 확인하는 중..."
-    
-    if ! command -v python3 &> /dev/null; then
+# Python/pip 명령어 감지 및 설정
+detect_python_commands() {
+    # Python 명령어 감지
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD="python3"
+    elif command -v python &> /dev/null; then
+        # python 버전이 3.x인지 확인
+        PYTHON_VERSION=$(python --version 2>&1 | grep -oP '(?<=Python )\d+')
+        if [[ "$PYTHON_VERSION" == "3" ]]; then
+            PYTHON_CMD="python"
+        else
+            print_error "Python 3가 필요합니다. 현재 설치된 python은 버전 2입니다."
+            exit 1
+        fi
+    else
         print_error "Python 3가 설치되어 있지 않습니다."
         exit 1
     fi
-    
-    if ! command -v pip3 &> /dev/null; then
+
+    # pip 명령어 감지
+    if command -v pip3 &> /dev/null; then
+        PIP_CMD="pip3"
+    elif command -v pip &> /dev/null; then
+        # pip가 Python 3용인지 확인
+        PIP_VERSION=$(pip --version 2>&1 | grep -oP '(?<=python )\d+')
+        if [[ "$PIP_VERSION" == "3" ]]; then
+            PIP_CMD="pip"
+        else
+            print_error "pip3가 필요합니다. 현재 설치된 pip는 Python 2용입니다."
+            exit 1
+        fi
+    else
         print_error "pip3가 설치되어 있지 않습니다."
         exit 1
     fi
-    
+
+    print_success "Python 명령어: $PYTHON_CMD"
+    print_success "pip 명령어: $PIP_CMD"
+}
+
+# 필요한 도구 확인
+check_requirements() {
+    print_status "필요한 도구들을 확인하는 중..."
+
+    # Python과 pip 명령어 감지
+    detect_python_commands
+
     if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
         print_error "curl 또는 wget이 설치되어 있지 않습니다."
         exit 1
     fi
-    
+
     if ! command -v tar &> /dev/null; then
         print_error "tar가 설치되어 있지 않습니다."
         exit 1
     fi
-    
+
     print_success "모든 필요한 도구가 설치되어 있습니다."
 }
 
@@ -241,13 +274,13 @@ install_dependencies() {
     
     # requirements.txt가 있다면 우선 사용
     if [[ -f "requirements.txt" ]]; then
-        pip3 install -r requirements.txt
+        $PIP_CMD install -r requirements.txt
         print_success "requirements.txt에서 의존성 설치 완료"
     else
         print_status "필수 패키지를 개별적으로 설치합니다..."
         for package in "${REQUIRED_PACKAGES[@]}"; do
             print_status "설치 중: $package"
-            pip3 install "$package"
+            $PIP_CMD install "$package"
         done
         print_success "필수 Python 의존성 설치 완료"
     fi
@@ -346,7 +379,7 @@ fi
 export PYTHONPATH="\$SCRIPT_DIR:\$PYTHONPATH"
 
 # INU Detector 실행 (config 파일 필수)
-python3 ec2_main.py --config config/sender_config.json "\$@"
+$PYTHON_CMD ec2_main.py --config config/sender_config.json "\$@"
 EOF
 
     chmod +x run_inu_detector.sh
