@@ -2,7 +2,7 @@
 set -e
 
 # INU Detector 설치 및 설정 스크립트
-# Usage: curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Detector/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Logsmith/main/install.sh | bash
 
 echo "========================================="
 echo "      INU Detector 설치 및 설정"
@@ -149,7 +149,7 @@ get_latest_version() {
     print_status "최신 릴리즈 버전을 확인하는 중..."
     
     # GitHub API를 사용하여 최신 릴리즈 정보 가져오기
-    REPO_URL="https://api.github.com/repos/S-Developer-Team-INU/INU-Detector/releases/latest"
+    REPO_URL="https://api.github.com/repos/S-Developer-Team-INU/INU-Logsmith/releases/latest"
     
     if command -v curl &> /dev/null; then
         LATEST_VERSION=$(curl -s "$REPO_URL" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
@@ -179,12 +179,12 @@ download_project() {
     cd "$TEMP_DIR"
 
     # GitHub 릴리즈에서 portable 패키지 다운로드 시도
-    DOWNLOAD_URL="https://github.com/S-Developer-Team-INU/INU-Detector/releases/download/${LATEST_VERSION}/inu-detector-portable.tar.gz"
+    DOWNLOAD_URL="https://github.com/S-Developer-Team-INU/INU-Logsmith/releases/download/${LATEST_VERSION}/inu-detector-portable.tar.gz"
 
     if command -v curl &> /dev/null; then
         if ! curl -fL -o inu-detector-portable.tar.gz "$DOWNLOAD_URL" 2>/dev/null; then
             print_warning "릴리즈 패키지를 찾을 수 없습니다. main 브랜치를 다운로드합니다."
-            curl -fL -o inu-detector.tar.gz "https://github.com/S-Developer-Team-INU/INU-Detector/archive/refs/heads/main.tar.gz"
+            curl -fL -o inu-detector.tar.gz "https://github.com/S-Developer-Team-INU/INU-Logsmith/archive/refs/heads/main.tar.gz"
             PACKAGE_NAME="inu-detector.tar.gz"
         else
             PACKAGE_NAME="inu-detector-portable.tar.gz"
@@ -192,7 +192,7 @@ download_project() {
     elif command -v wget &> /dev/null; then
         if ! wget -O inu-detector-portable.tar.gz "$DOWNLOAD_URL" 2>/dev/null; then
             print_warning "릴리즈 패키지를 찾을 수 없습니다. main 브랜치를 다운로드합니다."
-            wget -O inu-detector.tar.gz "https://github.com/S-Developer-Team-INU/INU-Detector/archive/refs/heads/main.tar.gz"
+            wget -O inu-detector.tar.gz "https://github.com/S-Developer-Team-INU/INU-Logsmith/archive/refs/heads/main.tar.gz"
             PACKAGE_NAME="inu-detector.tar.gz"
         else
             PACKAGE_NAME="inu-detector-portable.tar.gz"
@@ -402,7 +402,7 @@ finalize_installation() {
     echo "  - 전송자 설정: $INSTALL_DIR/config/sender_config.json"
     echo ""
     print_status "업데이트:"
-    echo "  - 최신 버전 확인: curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Detector/main/install.sh | bash"
+    echo "  - 최신 버전 확인: curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Logsmith/main/install.sh | bash"
     echo ""
     print_status "로그 확인:"
     echo "  - 애플리케이션 로그는 콘솔에 출력됩니다."

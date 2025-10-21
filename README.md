@@ -15,7 +15,7 @@ EC2에서 CloudTrail 로그를 수집하여 PostgreSQL RDS로 직접 전송하�
 ### 원클릭 설치 (권장)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Detector/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Logsmith/main/install.sh | bash
 ```
 
 설치 스크립트가 다음을 수행합니다:
@@ -29,9 +29,9 @@ curl -fsSL https://raw.githubusercontent.com/S-Developer-Team-INU/INU-Detector/m
 
 ```bash
 cd /opt
-sudo git clone https://github.com/S-Developer-Team-INU/INU-Detector.git
-sudo chown -R ec2-user:ec2-user INU-Detector
-cd INU-Detector
+sudo git clone https://github.com/S-Developer-Team-INU/INU-Logsmith.git
+sudo chown -R ec2-user:ec2-user INU-Logsmith
+cd INU-Logsmith
 
 # Python 가상환경 생성 및 의존성 설치
 python3 -m venv venv
