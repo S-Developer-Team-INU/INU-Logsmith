@@ -1,0 +1,45 @@
+[Unit]
+Description=INU-Detector CloudTrail Log Collector
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/INU-Detector
+
+# AWS 설정 (IAM 역할 사용 시 불필요)
+Environment="AWS_DEFAULT_REGION=ap-northeast-2"
+
+# 로그 설정
+Environment="LOG_LEVEL=INFO"
+
+# 수집 설정
+Environment="COLLECTION_INTERVAL=300"
+Environment="BATCH_SIZE=100"
+
+# RDS 설정 (설치 시 설정 필요)
+Environment="RDS_HOST=CHANGE_ME"
+Environment="RDS_PORT=5432"
+Environment="RDS_DATABASE=postgres"
+Environment="RDS_USER=postgres"
+Environment="RDS_PASSWORD=CHANGE_ME"
+
+# 애플리케이션 설정
+Environment="GROUP_ID=CHANGE_ME"
+
+# Python 가상환경 사용
+ExecStart=/opt/INU-Detector/venv/bin/python /opt/INU-Detector/ec2_main.py --mode service --config /opt/INU-Detector/config/sender_config.json
+
+Restart=always
+RestartSec=10
+
+# 보안 설정
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/INU-Detector
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

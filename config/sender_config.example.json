@@ -1,0 +1,20 @@
+{
+  "s3_buckets": [
+    {
+      "bucket_name": "your-cloudtrail-bucket-1",
+      "prefix": "AWSLogs/123456789012/CloudTrail/ap-northeast-2/",
+      "region": "ap-northeast-2",
+      "max_files": 100,
+      "enabled": true,
+      "description": "메인 CloudTrail 로그 버킷"
+    },
+    {
+      "bucket_name": "your-cloudtrail-bucket-2",
+      "prefix": "AWSLogs/123456789012/CloudTrail/us-east-1/",
+      "region": "us-east-1",
+      "max_files": 50,
+      "enabled": false,
+      "description": "추가 CloudTrail 로그 버킷 (비활성화)"
+    }
+  ]
+}
