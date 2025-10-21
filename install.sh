@@ -328,7 +328,7 @@ create_config_file() {
   "s3_buckets": [
     {
       "bucket_name": "$BUCKET_NAME",
-      "prefix": "AWSLogs/",
+      "prefix": "AWSLogs/093342385579/CloudTrail/ap-northeast-2/",
       "region": "$REGION",
       "max_files": 100,
       "enabled": true,
