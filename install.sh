@@ -100,7 +100,7 @@ get_user_input() {
     
     # Group ID 입력
     while true; do
-        read -p "$(echo -e "${BLUE}Group ID를 입력하세요:${NC} ")" GROUP_ID
+        read -p "$(echo -e "${BLUE}Group ID를 입력하세요:${NC} ")" GROUP_ID </dev/tty
         if [[ -n "$GROUP_ID" ]]; then
             break
         else
@@ -110,7 +110,7 @@ get_user_input() {
     
     # S3 Bucket Name 입력
     while true; do
-        read -p "$(echo -e "${BLUE}S3 Bucket Name을 입력하세요:${NC} ")" BUCKET_NAME
+        read -p "$(echo -e "${BLUE}S3 Bucket Name을 입력하세요:${NC} ")" BUCKET_NAME </dev/tty
         if [[ -n "$BUCKET_NAME" ]]; then
             break
         else
@@ -119,7 +119,7 @@ get_user_input() {
     done
     
     # AWS Region 입력 (기본값 제공)
-    read -p "$(echo -e "${BLUE}AWS Region을 입력하세요 [ap-northeast-2]:${NC} ")" REGION
+    read -p "$(echo -e "${BLUE}AWS Region을 입력하세요 [ap-northeast-2]:${NC} ")" REGION </dev/tty
     REGION=${REGION:-ap-northeast-2}
 
     echo ""
@@ -127,7 +127,7 @@ get_user_input() {
 
     # RDS Host 입력
     while true; do
-        read -p "$(echo -e "${BLUE}RDS Host를 입력하세요:${NC} ")" RDS_HOST
+        read -p "$(echo -e "${BLUE}RDS Host를 입력하세요:${NC} ")" RDS_HOST </dev/tty
         if [[ -n "$RDS_HOST" ]]; then
             break
         else
@@ -136,20 +136,20 @@ get_user_input() {
     done
 
     # RDS Port 입력 (기본값 제공)
-    read -p "$(echo -e "${BLUE}RDS Port를 입력하세요 [5432]:${NC} ")" RDS_PORT
+    read -p "$(echo -e "${BLUE}RDS Port를 입력하세요 [5432]:${NC} ")" RDS_PORT </dev/tty
     RDS_PORT=${RDS_PORT:-5432}
 
     # RDS Database 입력 (기본값 제공)
-    read -p "$(echo -e "${BLUE}Database 이름을 입력하세요 [postgres]:${NC} ")" RDS_DATABASE
+    read -p "$(echo -e "${BLUE}Database 이름을 입력하세요 [postgres]:${NC} ")" RDS_DATABASE </dev/tty
     RDS_DATABASE=${RDS_DATABASE:-postgres}
 
     # RDS User 입력 (기본값 제공)
-    read -p "$(echo -e "${BLUE}Database 사용자를 입력하세요 [postgres]:${NC} ")" RDS_USER
+    read -p "$(echo -e "${BLUE}Database 사용자를 입력하세요 [postgres]:${NC} ")" RDS_USER </dev/tty
     RDS_USER=${RDS_USER:-postgres}
 
     # RDS Password 입력 (필수)
     while true; do
-        read -s -p "$(echo -e "${BLUE}RDS Password를 입력하세요:${NC} ")" RDS_PASSWORD
+        read -s -p "$(echo -e "${BLUE}RDS Password를 입력하세요:${NC} ")" RDS_PASSWORD </dev/tty
         echo ""
         if [[ -n "$RDS_PASSWORD" ]]; then
             break
@@ -170,7 +170,7 @@ get_user_input() {
     echo "  - RDS Password: [설정됨]"
     echo ""
     
-    read -p "$(echo -e "${YELLOW}이 설정으로 진행하시겠습니까? (y/N):${NC} ")" CONFIRM
+    read -p "$(echo -e "${YELLOW}이 설정으로 진행하시겠습니까? (y/N):${NC} ")" CONFIRM </dev/tty
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
         print_error "설치가 취소되었습니다."
         exit 1
@@ -395,7 +395,7 @@ finalize_installation() {
     INSTALL_DIR="$HOME/inu-detector"
     
     if [[ -d "$INSTALL_DIR" ]]; then
-        read -p "$(echo -e "${YELLOW}$INSTALL_DIR 디렉토리가 이미 존재합니다. 덮어쓰시겠습니까? (y/N):${NC} ")" OVERWRITE
+        read -p "$(echo -e "${YELLOW}$INSTALL_DIR 디렉토리가 이미 존재합니다. 덮어쓰시겠습니까? (y/N):${NC} ")" OVERWRITE </dev/tty
         if [[ "$OVERWRITE" =~ ^[Yy]$ ]]; then
             rm -rf "$INSTALL_DIR"
         else
