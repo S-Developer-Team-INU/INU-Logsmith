@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import psycopg2
+    from psycopg2 import pool
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -60,7 +61,7 @@ def process_ip_address(ip_str: str) -> Optional[str]:
 class DirectRDSSender:
     """직접 PostgreSQL RDS 전송"""
 
-    def __init__(self):
+    def __init__(self, min_conn=1, max_conn=10):
         if not PSYCOPG2_AVAILABLE:
             raise Exception("psycopg2 설치 필요")
 
@@ -76,22 +77,33 @@ class DirectRDSSender:
         # settings에서 GROUP_ID 읽기
         self.group_id = settings.group_id
 
-        logger.info(f"RDS 연결 설정: {settings.rds_host}:{settings.rds_port}/{settings.rds_database}")
-        
-    def send_logs(self, log_data: CloudTrailLogData) -> bool:
-        """PostgreSQL RDS에 직접 로그 전송"""
-        conn = None
+        # 커넥션 풀 생성
         try:
-            conn = psycopg2.connect(
+            self.connection_pool = pool.ThreadedConnectionPool(
+                min_conn,
+                max_conn,
                 host=self.rds_config['host'],
                 port=self.rds_config['port'],
                 database=self.rds_config['database'],
                 user=self.rds_config['user'],
                 password=self.rds_config['password']
             )
-            
+            logger.info(f"RDS 커넥션 풀 생성 완료: {settings.rds_host}:{settings.rds_port}/{settings.rds_database} (min={min_conn}, max={max_conn})")
+        except Exception as e:
+            logger.error(f"커넥션 풀 생성 실패: {e}")
+            raise
+
+        logger.info(f"RDS 연결 설정: {settings.rds_host}:{settings.rds_port}/{settings.rds_database}")
+        
+    def send_logs(self, log_data: CloudTrailLogData) -> bool:
+        """PostgreSQL RDS에 직접 로그 전송"""
+        conn = None
+        try:
+            # 커넥션 풀에서 연결 가져오기
+            conn = self.connection_pool.getconn()
+
             cursor = conn.cursor()
-            
+
             for event in log_data.records:
                 # 1. events 테이블에 UUID 생성하여 삽입
                 event_uuid = str(uuid.uuid4())
@@ -171,7 +183,7 @@ class DirectRDSSender:
             conn.commit()
             logger.info(f"PostgreSQL 저장 완료: {len(log_data.records)}개")
             return True
-            
+
         except Exception as e:
             logger.error(f"PostgreSQL 저장 오류: {e}")
             if conn:
@@ -179,47 +191,54 @@ class DirectRDSSender:
             return False
         finally:
             if conn:
-                conn.close()
+                # 커넥션을 풀에 반환
+                self.connection_pool.putconn(conn)
     
     def check_existing_events(self, event_ids: list) -> set:
         """기존에 저장된 eventID들 확인"""
         if not event_ids:
             return set()
-            
+
         conn = None
         try:
-            conn = psycopg2.connect(
-                host=self.rds_config['host'],
-                port=self.rds_config['port'],
-                database=self.rds_config['database'],
-                user=self.rds_config['user'],
-                password=self.rds_config['password']
-            )
-            
+            # 커넥션 풀에서 연결 가져오기
+            conn = self.connection_pool.getconn()
+
             cursor = conn.cursor()
-            
+
             # eventID들을 IN 절로 한번에 조회
             placeholders = ','.join(['%s'] * len(event_ids))
             query = f"""
-                SELECT DISTINCT event_id 
-                FROM cloudtrail 
+                SELECT DISTINCT event_id
+                FROM cloudtrail
                 WHERE event_id IN ({placeholders})
             """
-            
+
             cursor.execute(query, event_ids)
             existing_events = {row[0] for row in cursor.fetchall()}
-            
+
             logger.info(f"기존 이벤트 확인: {len(existing_events)}/{len(event_ids)}개 중복")
             return existing_events
-            
+
         except Exception as e:
             logger.error(f"기존 이벤트 확인 오류: {e}")
             return set()
         finally:
             if conn:
-                conn.close()
+                # 커넥션을 풀에 반환
+                self.connection_pool.putconn(conn)
 
     def set_group_id(self, group_id: str):
         """그룹 ID 설정"""
         self.group_id = group_id
         logger.info(f"그룹 ID 설정: {group_id}")
+
+    def close_pool(self):
+        """커넥션 풀 종료"""
+        if hasattr(self, 'connection_pool') and self.connection_pool:
+            self.connection_pool.closeall()
+            logger.info("커넥션 풀 종료 완료")
+
+    def __del__(self):
+        """소멸자 - 커넥션 풀 정리"""
+        self.close_pool()

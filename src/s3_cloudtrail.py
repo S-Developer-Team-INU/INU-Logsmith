@@ -65,6 +65,45 @@ class S3CloudTrailCollector:
         
         return CloudTrailLogData(records=all_events)
     
+    def _generate_date_prefixes(
+        self,
+        base_prefix: str,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        last_timestamp: Optional[datetime] = None
+    ) -> List[str]:
+        """날짜 기반으로 S3 prefix 목록 생성
+
+        CloudTrail 경로 구조: AWSLogs/{account_id}/CloudTrail/{region}/{YYYY}/{MM}/{DD}/
+        """
+        prefixes = []
+
+        # 시간 범위 결정
+        if start_time and end_time:
+            # Once 모드: 시간 범위
+            start = start_time
+            end = end_time
+        elif last_timestamp:
+            # Service 모드: 마지막 시간부터 현재까지
+            start = last_timestamp
+            end = datetime.now()
+        else:
+            # 첫 실행: 최근 1일
+            end = datetime.now()
+            start = end - timedelta(days=1)
+
+        # 날짜별로 prefix 생성
+        current_date = start.date()
+        end_date = end.date()
+
+        while current_date <= end_date:
+            # CloudTrail 날짜 경로: YYYY/MM/DD/
+            date_prefix = f"{base_prefix}{current_date.year:04d}/{current_date.month:02d}/{current_date.day:02d}/"
+            prefixes.append(date_prefix)
+            current_date += timedelta(days=1)
+
+        return prefixes
+
     def _list_s3_objects(
         self,
         bucket_name: str,
@@ -89,43 +128,60 @@ class S3CloudTrailCollector:
             else:
                 print(f"[첫 실행] 최대 {max_files}개 파일 처리")
 
+            # 날짜 기반 prefix 생성
+            date_prefixes = self._generate_date_prefixes(prefix, start_time, end_time, last_timestamp)
+            print(f"날짜 기반 prefix {len(date_prefixes)}개 생성")
+
             paginator = self.s3_client.get_paginator('list_objects_v2')
-            pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
             total_files = 0
             matched_files = 0
 
-            for page in pages:
-                if 'Contents' in page:
-                    for obj in page['Contents']:
-                        key = obj['Key']
-                        total_files += 1
+            # 각 날짜별 prefix에서 파일 검색
+            for date_prefix in date_prefixes:
+                print(f"  검색 중: {date_prefix}")
 
-                        if key.endswith('.json.gz'):
-                            filename = key.split('/')[-1]
-                            file_datetime = self._extract_datetime_from_filename(filename)
+                try:
+                    pages = paginator.paginate(Bucket=bucket_name, Prefix=date_prefix)
 
-                            if file_datetime:
-                                # Once 모드: 시간 범위 필터
-                                if start_time or end_time:
-                                    if start_time <= file_datetime <= end_time:
-                                        objects.append(key)
-                                        matched_files += 1
+                    for page in pages:
+                        if 'Contents' in page:
+                            for obj in page['Contents']:
+                                key = obj['Key']
+                                total_files += 1
 
-                                # Service 모드: 마지막 시간 이후
-                                elif last_timestamp:
-                                    if file_datetime > last_timestamp:
-                                        objects.append(key)
-                                        matched_files += 1
+                                if key.endswith('.json.gz'):
+                                    filename = key.split('/')[-1]
+                                    file_datetime = self._extract_datetime_from_filename(filename)
 
-                                # 첫 실행: 모든 파일
-                                else:
-                                    objects.append(key)
-                                    matched_files += 1
+                                    if file_datetime:
+                                        # Once 모드: 시간 범위 필터
+                                        if start_time or end_time:
+                                            if start_time <= file_datetime <= end_time:
+                                                objects.append(key)
+                                                matched_files += 1
 
-                                # max_files 제한
-                                if len(objects) >= max_files:
-                                    break
+                                        # Service 모드: 마지막 시간 이후
+                                        elif last_timestamp:
+                                            if file_datetime > last_timestamp:
+                                                objects.append(key)
+                                                matched_files += 1
+
+                                        # 첫 실행: 모든 파일
+                                        else:
+                                            objects.append(key)
+                                            matched_files += 1
+
+                                        # max_files 제한
+                                        if len(objects) >= max_files:
+                                            break
+
+                        if len(objects) >= max_files:
+                            break
+
+                except Exception as e:
+                    print(f"  {date_prefix} 검색 오류: {e}")
+                    continue
 
                 if len(objects) >= max_files:
                     break
