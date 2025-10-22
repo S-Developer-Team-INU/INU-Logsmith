@@ -304,7 +304,12 @@ class S3CloudTrailCollector:
         batch_size: int = 100,
         last_timestamp: Optional[datetime] = None
     ) -> tuple[List[CloudTrailEvent], Optional[datetime]]:
-        """S3 버킷에서 파일별 배치 처리
+        """S3 버킷에서 최적화된 배치 처리
+
+        개선 사항:
+        1. 모든 파일에서 이벤트를 먼저 수집 (DB 접근 없음)
+        2. 시간 기반으로 파일 분류 (확실히 새로운 파일 vs 경계 파일)
+        3. 한 번의 쿼리로 전체 중복 체크
 
         Returns:
             tuple: (이벤트 목록, 마지막 처리 파일 타임스탬프)
@@ -329,54 +334,106 @@ class S3CloudTrailCollector:
             last_timestamp=last_timestamp,
             max_files=max_files
         )
-        
-        all_new_events = []
-        last_file_timestamp = None
 
-        # 파일별로 순차 처리
-        for obj_key in objects:
+        if not objects:
+            return [], None
+
+        print(f"총 {len(objects)}개 파일 처리 시작...")
+
+        # ===== 1단계: 모든 파일에서 이벤트 수집 (DB 접근 없음) =====
+        all_events = []
+        file_timestamps = []
+
+        for idx, obj_key in enumerate(objects, 1):
             try:
-                print(f"Processing {obj_key}...")
+                if idx % 10 == 0:
+                    print(f"  진행: {idx}/{len(objects)} 파일 처리 중...")
 
                 # S3 파일에서 이벤트 추출
                 file_events = self._process_s3_object(bucket_name, obj_key, event_names)
 
-                if not file_events:
-                    continue
+                if file_events:
+                    all_events.extend(file_events)
 
-                # 배치 단위로 중복 체크 및 저장
-                for i in range(0, len(file_events), batch_size):
-                    batch_events = file_events[i:i+batch_size]
-
-                    # eventID 목록 추출
-                    event_ids = [event.event_id for event in batch_events]
-
-                    # DB에서 기존 eventID 확인
-                    existing_ids = set()
-                    if duplicate_checker:
-                        existing_ids = duplicate_checker.check_existing_events(event_ids)
-
-                    # 중복되지 않은 이벤트만 필터링
-                    new_events = [
-                        event for event in batch_events
-                        if event.event_id not in existing_ids
-                    ]
-
-                    if new_events:
-                        all_new_events.extend(new_events)
-                        print(f"  배치 {i//batch_size + 1}: {len(new_events)}/{len(batch_events)}개 신규 이벤트")
-
-                # 마지막 처리 파일의 타임스탬프 추출
+                # 파일 타임스탬프 추출
                 filename = obj_key.split('/')[-1]
                 file_time = self._extract_datetime_from_filename(filename)
                 if file_time:
-                    last_file_timestamp = file_time
+                    file_timestamps.append(file_time)
 
             except Exception as e:
-                print(f"Error processing {obj_key}: {e}")
+                print(f"  파일 처리 오류 ({obj_key}): {e}")
                 continue
 
-        return all_new_events, last_file_timestamp
+        print(f"1단계 완료: {len(all_events)}개 이벤트 수집됨")
+
+        if not all_events:
+            return [], None
+
+        # ===== 2단계: 시간 기반 스마트 필터링 =====
+        # 마지막 처리 시간보다 충분히 나중 파일은 중복 가능성 낮음
+        boundary_margin = timedelta(hours=1)  # 경계 여유 시간
+
+        if last_timestamp:
+            boundary_time = last_timestamp + boundary_margin
+
+            # 확실히 새로운 이벤트와 경계 이벤트 분리
+            definite_new_events = [
+                e for e in all_events
+                if self._extract_datetime_from_filename(e.event_id) and
+                   self._parse_event_time(e.event_time) > boundary_time
+            ]
+            boundary_events = [
+                e for e in all_events
+                if e not in definite_new_events
+            ]
+
+            print(f"2단계: 확실히 새로운 이벤트 {len(definite_new_events)}개, 경계 이벤트 {len(boundary_events)}개")
+        else:
+            # 첫 실행이거나 타임스탬프 없으면 전체를 경계로 간주
+            definite_new_events = []
+            boundary_events = all_events
+
+        # ===== 3단계: 한 번의 쿼리로 중복 체크 =====
+        final_events = []
+
+        # 확실히 새로운 이벤트는 중복 체크 없이 추가
+        if definite_new_events:
+            final_events.extend(definite_new_events)
+            print(f"3-1단계: {len(definite_new_events)}개 이벤트 중복 체크 스킵")
+
+        # 경계 이벤트만 중복 체크 (한 번의 쿼리)
+        if boundary_events and duplicate_checker:
+            event_ids = [event.event_id for event in boundary_events]
+
+            print(f"3-2단계: {len(event_ids)}개 이벤트 ID 중복 체크 (1회 쿼리)...")
+            existing_ids = duplicate_checker.check_existing_events(event_ids)
+
+            # 중복되지 않은 이벤트만 필터링
+            new_events = [
+                event for event in boundary_events
+                if event.event_id not in existing_ids
+            ]
+
+            final_events.extend(new_events)
+            print(f"3-2단계 완료: {len(new_events)}/{len(boundary_events)}개 신규 이벤트")
+        elif boundary_events:
+            # duplicate_checker 없으면 전부 추가
+            final_events.extend(boundary_events)
+
+        # 마지막 처리 타임스탬프
+        last_file_timestamp = max(file_timestamps) if file_timestamps else None
+
+        print(f"최종: {len(final_events)}개 신규 이벤트 반환")
+        return final_events, last_file_timestamp
+
+    def _parse_event_time(self, event_time_str: str) -> datetime:
+        """이벤트 시간 문자열을 datetime으로 파싱"""
+        try:
+            # CloudTrail 이벤트 시간 형식: 2025-08-12T06:30:00Z
+            return datetime.strptime(event_time_str.replace('Z', '+00:00'), '%Y-%m-%dT%H:%M:%S%z').replace(tzinfo=None)
+        except:
+            return datetime.min
 
     def collect_from_multiple_buckets(
         self,
